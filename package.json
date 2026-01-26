@@ -1,0 +1,125 @@
+{
+  "name": "salsabeel",
+  "version": "1.0.4",
+  "description": "Salsabeel (سلسبيل) – Your Ultimate Faith Companion. A powerful Islamic desktop application for Quran, Hadith, Azkar, Prayer Times, Islamic Calendar, and more.",
+  "author": "Moaaz Zakarya",
+  "private": true,
+  "main": "electron/main.js",
+"scripts": {
+  "dev": "vite",
+  "build": "vite build",
+  "preview": "vite preview",
+  "lint": "eslint .",
+  "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+  "electron:build": "set NODE_OPTIONS=--max-old-space-size=12000 && vite build && electron-builder",
+  "electron:make": "electron-builder -w",
+  "dist": "npm run electron:build",
+  "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.salsabeel.app",
+    "productName": "Salsabeel",
+    "copyright": "© 2026 Moaaz Zakarya",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "build-resources"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon.ico",
+      "artifactName": "Salsabeel-Setup-${version}.${ext}",
+      "publisherName": "Moaaz Zakarya"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Salsabeel",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "license": "LICENSE.md"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "public/icon.png",
+      "category": "Education"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "!node_modules/.cache",
+      "!node_modules/.bin",
+      "!node_modules/.vite"
+    ],
+    "extraResources": [
+      {
+        "from": "public/hadith",
+        "to": "hadith",
+        "filter": ["*.json"]
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "moaaz9950",
+      "repo": "salsabeel"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/*.json"
+    ]
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-dropdown-menu": "^2.0.6",
+    "@radix-ui/react-navigation-menu": "^1.1.4",
+    "@radix-ui/react-select": "^2.0.0",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-tabs": "^1.0.4",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "date-fns": "^3.3.1",
+    "electron-updater": "^6.1.7",
+    "howler": "^2.2.4",
+    "idb": "^8.0.0",
+    "localforage": "^1.10.0",
+    "lucide-react": "^0.344.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-h5-audio-player": "^3.9.1",
+    "tailwind-merge": "^2.2.1",
+    "tailwindcss-animate": "^1.0.7",
+    "use-sound": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.11",
+    "@types/node": "^20.12.12",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.18",
+    "concurrently": "^8.2.2",
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.11",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.18",
+    "wait-on": "^8.0.3"
+  }
+}

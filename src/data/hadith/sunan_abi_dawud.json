@@ -1,0 +1,16 @@
+{ 	"name": "Sahih al-Bukhari",
+	"arabic_name": "صحيح البخاري",
+	"short_desc": "Ṣaḥīḥ al-Bukhārī is a collection of hadīth compiled by Abu Abdullāh Muhammad Ibn Ismā`īl al-Bukhārī(rahimahullāh). His collection is recognized by the overwhelming majority of the Muslim world to be one of the most authentic collections of the Sunnah of the Prophet (). It contains roughly 7563 hadīth (with repetitions) in 98 books.",
+	"num_books": "97",
+	"num_hadiths": "7563",
+	"all_books": [
+		{
+			"num": "1",
+			"english_title": "Revelation",
+			"arabic_title": "كتاب بدء الوحى",
+			"hadith_list": [
+				{"title": "Sahih al-Bukhari 1", "narrator": "Narrated 'Umar bin Al-Khattab:", "english_text": "I heard Allah's Messenger (ﷺ) saying, \"The reward of deeds depends upon the \n     intentions and every person will get the reward according to what he \n     has intended. So whoever emigrated for worldly benefits or for a woman\n     to marry, his emigration was for what he emigrated for.\"", "arabic_text": "حَدَّثَنَا الْحُمَيْدِيُّ عَبْدُ اللَّهِ بْنُ الزُّبَيْرِ  ، قَالَ : حَدَّثَنَا سُفْيَانُ  ، قَالَ : حَدَّثَنَا يَحْيَى بْنُ سَعِيدٍ الْأَنْصَارِيُّ  ، قَالَ : أَخْبَرَنِي مُحَمَّدُ بْنُ إِبْرَاهِيمَ التَّيْمِيُّ  ، أَنَّهُ سَمِعَ عَلْقَمَةَ بْنَ وَقَّاصٍ اللَّيْثِيَّ  ، يَقُولُ : سَمِعْتُ عُمَرَ بْنَ الْخَطَّابِ   رَضِيَ اللَّهُ عَنْهُ عَلَى الْمِنْبَرِ، قَالَ : سَمِعْتُ رَسُولَ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ، يَقُولُ : \"\nإِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى، فَمَنْ كَانَتْ هِجْرَتُهُ إِلَى دُنْيَا يُصِيبُهَا أَوْ إِلَى امْرَأَةٍ يَنْكِحُهَا، فَهِجْرَتُهُ إِلَى مَا هَاجَرَ إِلَيْهِ \"", "local_num": "1", "grade": "", "uuid": "0049bcf5-b316-4344-88cb-e89912ba254b"}
+				]
+		}
+	]
+}
