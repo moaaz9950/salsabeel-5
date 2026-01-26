@@ -695,8 +695,8 @@ const ASMA_AL_HUSNA = [
     transliteration: "Allah",
     meaning: "The One True God",
     detailed: "الاسم الجامع لكل صفات الكمال، لا يسمى به غيره."
-  }
-
+  },
+];
 // Opposing names with their meanings
 const OPPOSING_NAMES = [
   { names: ["القابض", "الباسط"], meaning: "يقتّر الرّزق ويوسّعه" },
