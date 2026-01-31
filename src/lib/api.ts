@@ -22,6 +22,7 @@ const QURAN_API_BASE = 'https://api.quran.com/api/v4';
 const PRAYER_API_BASE = 'https://api.aladhan.com/v1';
 const MP3_QURAN_API = 'https://mp3quran.net/api/v3';
 const TAFSIR_API_BASE = 'https://api.quran.com/api/v4';
+const VERSE_BY_VERSE_API = 'https://api.alquran.cloud/v1';
 
 // Local Quran data mapping
 const QURAN_DATA = {
@@ -149,6 +150,106 @@ export const TAFSIR_SOURCES = [
   }
 ];
 
+// List of verse-by-verse reciters
+export const VERSE_BY_VERSE_RECITERS = [
+  {
+    id: 'ar.abdulbasitmurattal',
+    name: 'عبد الباسط عبد الصمد (مرتل)',
+    englishName: 'Abdul Basit Abdul Samad (Murattal)',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'تلاوة مرتلة للشيخ عبد الباسط عبد الصمد'
+  },
+  {
+    id: 'ar.abdurrahmaansudais',
+    name: 'عبد الرحمن السديس',
+    englishName: 'Abdur Rahman As-Sudais',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'إمام وخطيب الحرم المكي الشريف'
+  },
+  {
+    id: 'ar.saoodshuraym',
+    name: 'سعود الشريم',
+    englishName: 'Saood Al-Shuraym',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'إمام وخطيب الحرم المكي الشريف'
+  },
+  {
+    id: 'ar.mishaariraashid',
+    name: 'مشاري راشد العفاسي',
+    englishName: 'Mishary Rashid Alafasy',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'إمام كويتي مشهور'
+  },
+  {
+    id: 'ar.mahermuaiqly',
+    name: 'ماهر المعيقلي',
+    englishName: 'Maher Al Muaiqly',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'إمام الحرم المكي'
+  },
+  {
+    id: 'ar.hudhaify',
+    name: 'علي بن عبد الرحمن الحذيفي',
+    englishName: 'Ali Al-Hudhaify',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'إمام الحرم المدني'
+  },
+  {
+    id: 'ar.abdulbasitmujawwad',
+    name: 'عبد الباسط عبد الصمد (مجود)',
+    englishName: 'Abdul Basit Abdul Samad (Mujawwad)',
+    style: 'Mujawwad',
+    language: 'ar',
+    description: 'تلاوة مجودة للشيخ عبد الباسط عبد الصمد'
+  },
+  {
+    id: 'ar.minshawimujawwad',
+    name: 'محمد صديق المنشاوي (مجود)',
+    englishName: 'Mohammad Siddiq Al-Minshawi (Mujawwad)',
+    style: 'Mujawwad',
+    language: 'ar',
+    description: 'تلاوة مجودة للشيخ محمد صديق المنشاوي'
+  },
+  {
+    id: 'ar.alafasymurattal',
+    name: 'مشاري العفاسي (مرتل)',
+    englishName: 'Mishary Alafasy (Murattal)',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'تلاوة مرتلة للشيخ مشاري العفاسي'
+  },
+  {
+    id: 'ar.ghamdi',
+    name: 'سعود الغامدي',
+    englishName: 'Saud Al-Ghamdi',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'قارئ سعودي مشهور'
+  },
+  {
+    id: 'ar.hanirifai',
+    name: 'هاني الرفاعي',
+    englishName: 'Hani Al-Rifai',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'قارئ مصري مشهور'
+  },
+  {
+    id: 'ar.aymanswoaid',
+    name: 'أيمن سويد',
+    englishName: 'Ayman Sowaid',
+    style: 'Murattal',
+    language: 'ar',
+    description: 'قارئ سوري مشهور'
+  }
+];
+
 export async function fetchSurah(surahNumber: number, edition = 'hafs') {
   try {
     // Get the local data for the selected edition
@@ -169,7 +270,7 @@ export async function fetchSurah(surahNumber: number, edition = 'hafs') {
       number: surahNumber,
       name: verses[0].sura_name_ar,
       englishName: verses[0].sura_name_en,
-      revelationType: "Meccan", // This should be determined based on actual data
+      revelationType: verses[0].sura_no <= 92 ? "Meccan" : "Medinan", // Based on surah number
       verses: verses.map(verse => ({
         number: verse.aya_no,
         text: verse.aya_text,
@@ -426,6 +527,7 @@ export function getReciterMoshafForEdition(reciter: any, edition: string) {
   return matchingMoshaf || reciter.moshaf[0];
 }
 
+// Fetch full surah audio for reciter (verse-by-verse API)
 export async function fetchReciterSurah(reciterId: number, surahNumber: number) {
   try {
     // Get reciter info from API
@@ -530,4 +632,234 @@ export async function fetchReciterSurahForEdition(reciterId: number, surahNumber
     console.error('Error fetching recitation for edition:', error);
     throw error;
   }
+}
+
+// === VERSE-BY-VERSE RECITATION API FUNCTIONS ===
+
+// Fetch all verses audio for a surah from verse-by-verse API
+export async function fetchVerseByVerseSurah(reciterId: string, surahNumber: number) {
+  try {
+    const response = await fetch(`${VERSE_BY_VERSE_API}/surah/${surahNumber}/${reciterId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch verse-by-verse audio');
+    }
+    
+    const data = await response.json();
+    
+    if (data.code !== 200) {
+      throw new Error(data.status || 'Failed to fetch audio');
+    }
+    
+    // Return structured data with verse information
+    return {
+      surah: surahNumber,
+      reciter: reciterId,
+      verses: data.data.ayahs.map((ayah: any) => ({
+        number: ayah.numberInSurah,
+        numberInSurah: ayah.numberInSurah,
+        audio: ayah.audio,
+        text: ayah.text,
+        surah: {
+          number: data.data.number,
+          name: data.data.name,
+          englishName: data.data.englishName
+        }
+      }))
+    };
+  } catch (error) {
+    console.error('Error fetching verse-by-verse audio:', error);
+    throw error;
+  }
+}
+
+// Fetch individual verse audio
+export async function fetchVerseAudio(reciterId: string, surahNumber: number, verseNumber: number) {
+  try {
+    const response = await fetch(
+      `${VERSE_BY_VERSE_API}/ayah/${surahNumber}:${verseNumber}/${reciterId}`
+    );
+    
+    if (!response.ok) {
+      // Try alternative endpoint format if first fails
+      const alternativeResponse = await fetch(
+        `${VERSE_BY_VERSE_API}/ayah/${surahNumber}:${verseNumber}/editions/${reciterId}`
+      );
+      
+      if (!alternativeResponse.ok) {
+        throw new Error('Failed to fetch verse audio');
+      }
+      
+      const altData = await alternativeResponse.json();
+      
+      if (altData.code !== 200) {
+        throw new Error(altData.status || 'Failed to fetch audio');
+      }
+      
+      return {
+        surah: surahNumber,
+        verse: verseNumber,
+        reciter: reciterId,
+        audio: altData.data[0]?.audio,
+        text: altData.data[0]?.text
+      };
+    }
+    
+    const data = await response.json();
+    
+    if (data.code !== 200) {
+      throw new Error(data.status || 'Failed to fetch audio');
+    }
+    
+    return {
+      surah: surahNumber,
+      verse: verseNumber,
+      reciter: reciterId,
+      audio: data.data?.audio,
+      text: data.data?.text
+    };
+  } catch (error) {
+    console.error('Error fetching verse audio:', error);
+    throw error;
+  }
+}
+
+// Batch fetch multiple verses at once
+export async function fetchMultipleVerseAudio(reciterId: string, surahNumber: number, verseNumbers: number[]) {
+  try {
+    const promises = verseNumbers.map(verseNumber => 
+      fetchVerseAudio(reciterId, surahNumber, verseNumber)
+    );
+    
+    const results = await Promise.allSettled(promises);
+    
+    const verseMap: Record<number, any> = {};
+    
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        verseMap[verseNumbers[index]] = result.value;
+      }
+    });
+    
+    return verseMap;
+  } catch (error) {
+    console.error('Error fetching multiple verses:', error);
+    return {};
+  }
+}
+
+// Get reciter info by ID
+export function getVerseReciterById(reciterId: string) {
+  return VERSE_BY_VERSE_RECITERS.find(reciter => reciter.id === reciterId);
+}
+
+// Get reciters by style (Murattal or Mujawwad)
+export function getVerseRecitersByStyle(style: 'Murattal' | 'Mujawwad') {
+  return VERSE_BY_VERSE_RECITERS.filter(reciter => reciter.style === style);
+}
+
+// Check if reciter is available
+export function isReciterAvailable(reciterId: string) {
+  return VERSE_BY_VERSE_RECITERS.some(reciter => reciter.id === reciterId);
+}
+
+// Test API connection for verse-by-verse
+export async function testVerseByVerseApi() {
+  try {
+    const response = await fetch(`${VERSE_BY_VERSE_API}/surah/1/ar.abdulbasitmurattal`);
+    return response.ok;
+  } catch (error) {
+    console.error('Verse-by-verse API test failed:', error);
+    return false;
+  }
+}
+
+// Fetch surah info for verse-by-verse recitation
+export async function fetchSurahInfo(surahNumber: number) {
+  try {
+    const response = await fetch(`${VERSE_BY_VERSE_API}/surah/${surahNumber}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch surah info');
+    }
+    
+    const data = await response.json();
+    
+    if (data.code !== 200) {
+      throw new Error(data.status || 'Failed to fetch surah info');
+    }
+    
+    return data.data;
+  } catch (error) {
+    console.error('Error fetching surah info:', error);
+    throw error;
+  }
+}
+
+// Get all available reciters
+export function getAllVerseReciters() {
+  return VERSE_BY_VERSE_RECITERS;
+}
+
+// Get reciters by language
+export function getVerseRecitersByLanguage(language: string) {
+  return VERSE_BY_VERSE_RECITERS.filter(reciter => reciter.language === language);
+}
+
+// Search reciters by name
+export function searchVerseReciters(query: string) {
+  const lowerQuery = query.toLowerCase();
+  return VERSE_BY_VERSE_RECITERS.filter(reciter => 
+    reciter.name.toLowerCase().includes(lowerQuery) ||
+    reciter.englishName.toLowerCase().includes(lowerQuery) ||
+    reciter.id.toLowerCase().includes(lowerQuery)
+  );
+}
+
+// Get popular verse reciters (default selection)
+export function getPopularVerseReciters() {
+  return VERSE_BY_VERSE_RECITERS.filter(reciter => 
+    ['ar.abdulbasitmurattal', 'ar.abdurrahmaansudais', 'ar.mishaariraashid', 'ar.mahermuaiqly']
+    .includes(reciter.id)
+  );
+}
+
+// Cache management for verse audio
+const verseAudioCache = new Map<string, { audio: string; timestamp: number }>();
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+// Get cached verse audio
+export function getCachedVerseAudio(reciterId: string, surahNumber: number, verseNumber: number) {
+  const cacheKey = `${reciterId}-${surahNumber}-${verseNumber}`;
+  const cached = verseAudioCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.audio;
+  }
+  
+  return null;
+}
+
+// Cache verse audio
+export function cacheVerseAudio(reciterId: string, surahNumber: number, verseNumber: number, audioUrl: string) {
+  const cacheKey = `${reciterId}-${surahNumber}-${verseNumber}`;
+  verseAudioCache.set(cacheKey, {
+    audio: audioUrl,
+    timestamp: Date.now()
+  });
+}
+
+// Clear old cache entries
+export function clearExpiredCache() {
+  const now = Date.now();
+  for (const [key, value] of verseAudioCache.entries()) {
+    if (now - value.timestamp > CACHE_DURATION) {
+      verseAudioCache.delete(key);
+    }
+  }
+}
+
+// Clear all cache
+export function clearAllCache() {
+  verseAudioCache.clear();
 }
