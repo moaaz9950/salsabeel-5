@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Moon, Sun, Radio, Book, Settings, Sparkles, Clock, Heart, Bookmark, Calendar as CalendarIcon, Calculator, ExternalLink } from 'lucide-react';
+import { Moon, Sun, Radio, Book, Settings, Sparkles, Clock, Heart, Bookmark, Calendar as CalendarIcon, Calculator, ExternalLink, Flame } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { cn } from './lib/utils';
 import RadioPlayer from './components/RadioPlayer';
@@ -10,6 +10,8 @@ import SurahView from './components/SurahView';
 import Azkar from './components/Azkar';
 import Calendar from './components/Calendar';
 import ZakatCalculator from './components/ZakatCalculator';
+import RamadanPage from './components/RamadanPage';
+import { getCurrentRamadanState } from './lib/ramadanService';
 
 // Dynamic imports for heavy components
 const TafsirView = lazy(() => import('./components/TafsirView'));
@@ -92,6 +94,12 @@ function App() {
   const [selectedSurah, setSelectedSurah] = useState(1);
   const [selectedVerse, setSelectedVerse] = useState(1);
   const [showSurahView, setShowSurahView] = useState(false);
+  const [isRamadan, setIsRamadan] = useState(false);
+
+  useEffect(() => {
+    const ramadanState = getCurrentRamadanState();
+    setIsRamadan(ramadanState.isRamadan);
+  }, []);
 
   const handleSurahSelect = (surahNumber: number) => {
     setSelectedSurah(surahNumber);
@@ -204,20 +212,34 @@ function App() {
             <button
               onClick={() => setActiveTab('calendar')}
               className={cn(
-                "px-4 py-2 rounded-lg", 
-                activeTab === 'calendar' ? 
-                  theme === 'ramadan' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white' 
+                "px-4 py-2 rounded-lg",
+                activeTab === 'calendar' ?
+                  theme === 'ramadan' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
                 : ''
               )}
             >
               <CalendarIcon className="w-5 h-5" />
             </button>
+            {isRamadan && (
+              <button
+                onClick={() => setActiveTab('ramadan')}
+                className={cn(
+                  "px-4 py-2 rounded-lg animate-pulse",
+                  activeTab === 'ramadan' ?
+                    'bg-amber-500 text-white' :
+                    'hover:bg-amber-100'
+                )}
+                title="Ramadan"
+              >
+                <Flame className="w-5 h-5" />
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('zakat')}
               className={cn(
-                "px-4 py-2 rounded-lg", 
-                activeTab === 'zakat' ? 
-                  theme === 'ramadan' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white' 
+                "px-4 py-2 rounded-lg",
+                activeTab === 'zakat' ?
+                  theme === 'ramadan' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
                 : ''
               )}
             >
@@ -336,6 +358,14 @@ function App() {
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
               <Calendar />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'ramadan' && (
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <RamadanPage />
             </div>
           </div>
         )}
