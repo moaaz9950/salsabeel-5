@@ -11,9 +11,10 @@ import Azkar from './components/Azkar';
 import Calendar from './components/Calendar';
 import ZakatCalculator from './components/ZakatCalculator';
 import RamadanPage from './components/RamadanPage';
+import { getCurrentRamadanState } from './lib/ramadanService';
 
 // Dynamic imports for heavy components
-const TafsirView = lazy(() => import('./components/TafsirView'));
+// const TafsirView = lazy(() => import('./components/TafsirView')); // Commented out as it was unused
 const HadithViewer = lazy(() => import('./components/Hadith/HadithViewer'));
 
 // Loading component for dynamic imports
@@ -31,7 +32,7 @@ const IslamicTVChannel = () => (
       <div className="flex items-center gap-2 mb-2">
         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
         <h2 className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
-          القنوات الإسلامية المباشرة
+           القنوات الإسلامية المباشرة
         </h2>
         <span className="text-sm text-emerald-600 dark:text-emerald-400">LIVE</span>
       </div>
@@ -95,17 +96,9 @@ function App() {
   const [showSurahView, setShowSurahView] = useState(false);
   const [isRamadan, setIsRamadan] = useState(false);
 
-  // Simplified Ramadan check - you can replace this with actual date calculation
   useEffect(() => {
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth() + 1; // 1-12
-    const currentYear = currentDate.getFullYear();
-    
-    // Simple check: Assume Ramadan is in April (month 4) for testing
-    // In production, you would use Hijri calendar calculation
-    const isRamadanMonth = currentMonth === 4; // Change this to actual calculation
-    
-    setIsRamadan(isRamadanMonth);
+    const ramadanState = getCurrentRamadanState();
+    setIsRamadan(ramadanState.isRamadan);
   }, []);
 
   const handleSurahSelect = (surahNumber: number) => {
@@ -228,20 +221,21 @@ function App() {
               <CalendarIcon className="w-5 h-5" />
             </button>
             
-            {/* Always show Ramadan tab, but highlight during Ramadan */}
-            <button
-              onClick={() => setActiveTab('ramadan')}
-              className={cn(
-                "px-4 py-2 rounded-lg",
-                activeTab === 'ramadan' ?
-                  theme === 'ramadan' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
-                  : '',
-                isRamadan && 'animate-pulse'
-              )}
-              title="Ramadan"
-            >
-              <Flame className="w-5 h-5" />
-            </button>
+            {/* FIXED LINE BELOW: Changed showRamadanTab to isRamadan */}
+            {isRamadan && (
+              <button
+                onClick={() => setActiveTab('ramadan')}
+                className={cn(
+                  "px-4 py-2 rounded-lg animate-pulse",
+                  activeTab === 'ramadan' ?
+                    'bg-amber-500 text-white' :
+                    'hover:bg-amber-100'
+                )}
+                title="Ramadan"
+              >
+                <Flame className="w-5 h-5" />
+              </button>
+            )}
             
             <button
               onClick={() => setActiveTab('zakat')}
@@ -339,7 +333,6 @@ function App() {
             </div>
           </div>
         )}
-
         {activeTab === 'azkar' && (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
@@ -375,7 +368,7 @@ function App() {
         {activeTab === 'ramadan' && (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
-              <RamadanPage theme={theme} />
+              <RamadanPage />
             </div>
           </div>
         )}
@@ -427,6 +420,7 @@ function App() {
                     />
                   </div>
                 </div>
+
               </div>
             </div>
           </div>
