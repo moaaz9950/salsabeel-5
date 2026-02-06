@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Timer, Bell, MapPin, AlertCircle, Calendar, Settings, Globe, Moon, Sun, Star, Compass, Navigation, RefreshCw } from 'lucide-react';
+import { Timer, Bell, MapPin, AlertCircle, Calendar, Settings, Globe, Moon, Sun, Star, Compass, Navigation, RefreshCw, Volume2, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTheme } from '../hooks/useTheme';
 import { cn } from '../lib/utils';
+import { prayerNotificationManager } from '../utils/prayerNotifications';
 
 interface PrayerTimesData {
   timings: {
@@ -140,6 +141,10 @@ export default function PrayerTimes() {
   const [manualLocation, setManualLocation] = useState({ city: '', country: '' });
   const [showManualInput, setShowManualInput] = useState(false);
   const [locationMethod, setLocationMethod] = useState<'auto' | 'manual'>('auto');
+  const [selectedAthan, setSelectedAthan] = useState('makkah');
+  const [athanVolume, setAthanVolume] = useState(0.7);
+  const [notifyBeforeMinutes, setNotifyBeforeMinutes] = useState(5);
+  const [hasNotificationPermission, setHasNotificationPermission] = useState(false);
 
   // Current time updater
   useEffect(() => {
@@ -152,7 +157,44 @@ export default function PrayerTimes() {
   // Initialize component
   useEffect(() => {
     checkLocationPermission();
+    checkNotificationPermission();
+    loadNotificationSettings();
   }, []);
+
+  // Load notification settings
+  const loadNotificationSettings = () => {
+    setNotificationsEnabled(prayerNotificationManager.isEnabled());
+    setSelectedAthan(prayerNotificationManager.getAthanSource());
+    setAthanVolume(prayerNotificationManager.getVolume());
+    setNotifyBeforeMinutes(prayerNotificationManager.getNotifyBefore());
+  };
+
+  // Check notification permission
+  const checkNotificationPermission = () => {
+    if ('Notification' in window) {
+      setHasNotificationPermission(Notification.permission === 'granted');
+    }
+  };
+
+  // Request notification permission
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      setError(language === 'ar' 
+        ? 'التنبيهات غير مدعومة في هذا المتصفح' 
+        : 'Notifications are not supported in this browser'
+      );
+      return false;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setHasNotificationPermission(permission === 'granted');
+      return permission === 'granted';
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      return false;
+    }
+  };
 
   // Load prayer times when location changes
   useEffect(() => {
@@ -183,6 +225,7 @@ export default function PrayerTimes() {
         });
         setLocationMethod('manual');
         setLocationPermission('granted');
+        setShowManualInput(false);
       }
     }, 5000);
 
@@ -250,7 +293,8 @@ export default function PrayerTimes() {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           timeout: 10000,
-          maximumAge: 600000
+          maximumAge: 600000,
+          enableHighAccuracy: true
         });
       });
 
@@ -260,14 +304,14 @@ export default function PrayerTimes() {
       
       // Get city and country from reverse geocoding
       try {
-        const response = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`);
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=en`);
         if (response.ok) {
           const data = await response.json();
           setLocation({
             lat,
             lng,
-            city: data.city || data.locality || 'Unknown',
-            country: data.countryName || 'Unknown'
+            city: data.address.city || data.address.town || data.address.village || 'Unknown',
+            country: data.address.country || 'Unknown'
           });
         } else {
           setLocation({ lat, lng, city: 'Unknown', country: 'Unknown' });
@@ -300,54 +344,75 @@ export default function PrayerTimes() {
       setLoading(true);
       setError(null);
       
-      // Use geocoding to get coordinates from city/country
+      const cleanCity = manualLocation.city.trim();
+      const cleanCountry = manualLocation.country.trim();
+      const address = `${cleanCity}, ${cleanCountry}`;
+      
+      // Try direct address-based API first
+      const today = new Date();
+      const formattedDate = format(today, 'dd-MM-yyyy');
+      
+      // Test if the address works with the API
+      const testUrl = `https://api.aladhan.com/v1/timingsByAddress/${formattedDate}?address=${encodeURIComponent(address)}&method=${calculationMethod}`;
+      
       try {
-        const geocodeResponse = await fetch(
-          `https://api.bigdatacloud.net/data/city?name=${encodeURIComponent(manualLocation.city)}&countryName=${encodeURIComponent(manualLocation.country)}&localityLanguage=en`
-        );
-        
-        if (geocodeResponse.ok) {
-          const geocodeData = await geocodeResponse.json();
-          if (geocodeData.latitude && geocodeData.longitude) {
-            setLocation({
-              lat: geocodeData.latitude,
-              lng: geocodeData.longitude,
-              city: manualLocation.city,
-              country: manualLocation.country
-            });
-            setLocationMethod('manual');
-            setShowManualInput(false);
-            return;
-          }
+        const testResponse = await fetch(testUrl);
+        if (testResponse.ok) {
+          // Address works, use it
+          const newLocation = {
+            lat: 0,
+            lng: 0,
+            city: cleanCity,
+            country: cleanCountry
+          };
+          setLocation(newLocation);
+          setLocationMethod('manual');
+          setShowManualInput(false);
+          
+          // Force reload of prayer times with new location
+          setTimeout(() => {
+            loadPrayerTimes();
+          }, 100);
+          return;
         }
-      } catch (geoError) {
-        console.error('Geocoding failed, using manual location without coordinates:', geoError);
+      } catch (apiError) {
+        console.log('Direct API failed, trying geocoding');
       }
       
-      // Fallback: use the manual location for API call even without coordinates
-      setLocation({
+      // Fallback: Use as manual location without coordinates
+      const newLocation = {
         lat: 0,
         lng: 0,
-        city: manualLocation.city,
-        country: manualLocation.country
-      });
+        city: cleanCity,
+        country: cleanCountry
+      };
+      setLocation(newLocation);
       setLocationMethod('manual');
       setShowManualInput(false);
       
+      // Show success message
+      setError(language === 'ar' 
+        ? 'تم حفظ الموقع يدوياً بنجاح. جاري تحميل أوقات الصلاة...'
+        : 'Location saved successfully. Loading prayer times...'
+      );
+      
+      // Force reload of prayer times
+      setTimeout(() => {
+        loadPrayerTimes();
+      }, 100);
+      
     } catch (error) {
       console.error('Manual location error:', error);
-      setError(language === 'ar' ? 'فشل في العثور على الموقع. تحقق من اسم المدينة والدولة.' : 'Failed to find location. Please check city and country names.');
+      setError(language === 'ar' 
+        ? 'فشل في حفظ الموقع. حاول مرة أخرى.' 
+        : 'Failed to save location. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
   }
 
   async function loadPrayerTimes() {
-    if (!location) {
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
@@ -356,17 +421,22 @@ export default function PrayerTimes() {
       const formattedDate = format(today, 'dd-MM-yyyy');
       let apiUrl: string;
 
-      console.log('Loading prayer times for location:', location);
+      console.log('Loading prayer times for:', location || manualLocation);
 
-      if (locationMethod === 'manual' && location.city && location.country) {
+      if (locationMethod === 'manual' && location?.city) {
         // Use address-based API for manual location
         const address = `${location.city}, ${location.country}`;
         apiUrl = `https://api.aladhan.com/v1/timingsByAddress/${formattedDate}?address=${encodeURIComponent(address)}&method=${calculationMethod}`;
         console.log('Using address API:', address);
-      } else if (location.lat && location.lng) {
+      } else if (location?.lat && location?.lng && locationMethod === 'auto') {
         // Use coordinate-based API for automatic location
         apiUrl = `https://api.aladhan.com/v1/timings/${formattedDate}?latitude=${location.lat}&longitude=${location.lng}&method=${calculationMethod}`;
         console.log('Using coordinates API:', location.lat, location.lng);
+      } else if (manualLocation.city && manualLocation.country) {
+        // Use manual location from input
+        const address = `${manualLocation.city}, ${manualLocation.country}`;
+        apiUrl = `https://api.aladhan.com/v1/timingsByAddress/${formattedDate}?address=${encodeURIComponent(address)}&method=${calculationMethod}`;
+        console.log('Using manual input API:', address);
       } else {
         // Fallback to Mecca
         apiUrl = `https://api.aladhan.com/v1/timingsByAddress/${formattedDate}?address=Mecca,Saudi Arabia&method=${calculationMethod}`;
@@ -387,6 +457,11 @@ export default function PrayerTimes() {
       if (data.code === 200 && data.data) {
         setPrayerData(data.data);
         setError(null);
+        
+        // Update notifications if enabled
+        if (notificationsEnabled) {
+          prayerNotificationManager.setPrayerTimes(data.data.timings);
+        }
       } else {
         throw new Error(data.data || 'Invalid API response');
       }
@@ -399,15 +474,17 @@ export default function PrayerTimes() {
       );
       
       // Set fallback prayer data
+      const fallbackTimes = {
+        Fajr: "05:00",
+        Sunrise: "06:30",
+        Dhuhr: "12:15",
+        Asr: "15:45",
+        Maghrib: "18:20",
+        Isha: "19:45"
+      };
+      
       setPrayerData({
-        timings: {
-          Fajr: "05:00",
-          Sunrise: "06:30",
-          Dhuhr: "12:15",
-          Asr: "15:45",
-          Maghrib: "18:20",
-          Isha: "19:45"
-        },
+        timings: fallbackTimes,
         date: {
           readable: new Date().toDateString(),
           timestamp: Date.now().toString(),
@@ -435,13 +512,22 @@ export default function PrayerTimes() {
           latitude: location?.lat || 21.4225,
           longitude: location?.lng || 39.8262,
           timezone: "Asia/Riyadh",
-          method: { id: calculationMethod, name: CALCULATION_METHODS.find(m => m.id === calculationMethod)?.name || "Muslim World League", params: {} },
+          method: { 
+            id: calculationMethod, 
+            name: CALCULATION_METHODS.find(m => m.id === calculationMethod)?.name || "Muslim World League", 
+            params: {} 
+          },
           latitudeAdjustmentMethod: "ANGLE_BASED",
           midnightMode: "STANDARD",
           school: "STANDARD",
           offset: {}
         }
       });
+      
+      // Update notifications with fallback times
+      if (notificationsEnabled) {
+        prayerNotificationManager.setPrayerTimes(fallbackTimes);
+      }
     } finally {
       setLoading(false);
     }
@@ -481,12 +567,23 @@ export default function PrayerTimes() {
     const hoursRemaining = Math.floor(minutesRemaining / 60);
     const minsRemaining = minutesRemaining % 60;
     
-    const timeRemainingStr = language === 'ar' 
-      ? `${hoursRemaining} ساعة ${minsRemaining} دقيقة`
-      : `${hoursRemaining}h ${minsRemaining}m`;
+    let timeRemainingStr = '';
+    if (language === 'ar') {
+      if (hoursRemaining > 0) {
+        timeRemainingStr = `${hoursRemaining} ساعة ${minsRemaining} دقيقة`;
+      } else {
+        timeRemainingStr = `${minsRemaining} دقيقة`;
+      }
+    } else {
+      if (hoursRemaining > 0) {
+        timeRemainingStr = `${hoursRemaining}h ${minsRemaining}m`;
+      } else {
+        timeRemainingStr = `${minsRemaining}m`;
+      }
+    }
     
     // Find the original time string
-    const originalPrayer = prayers.find(p => p.name === next.name);
+    const originalPrayer = prayers.find(p => p.name === next!.name);
     const timeStr = originalPrayer ? originalPrayer.time : '';
     
     setNextPrayer({ 
@@ -496,42 +593,88 @@ export default function PrayerTimes() {
     });
   }
 
-  const toggleNotifications = () => {
-    if (Notification.permission === 'granted') {
-      setNotificationsEnabled(!notificationsEnabled);
-    } else if (Notification.permission !== 'denied') {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          setNotificationsEnabled(true);
-        }
-      });
+  const toggleNotifications = async () => {
+    if (!('Notification' in window)) {
+      setError(language === 'ar' 
+        ? 'التنبيهات غير مدعومة في هذا المتصفح' 
+        : 'Notifications are not supported in this browser'
+      );
+      return;
+    }
+
+    let permission = Notification.permission;
+    
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+      setHasNotificationPermission(permission === 'granted');
+    }
+
+    if (permission === 'granted') {
+      const newEnabledState = !notificationsEnabled;
+      setNotificationsEnabled(newEnabledState);
+      prayerNotificationManager.setEnabled(newEnabledState);
+      
+      if (newEnabledState && prayerData) {
+        prayerNotificationManager.setPrayerTimes(prayerData.timings);
+      }
+    } else {
+      setError(language === 'ar'
+        ? 'تم رفض الإذن بالتنبيهات. يرجى تمكينها من إعدادات المتصفح.'
+        : 'Notification permission denied. Please enable it in browser settings.'
+      );
     }
   };
 
+  const handleAthanSourceChange = (source: string) => {
+    setSelectedAthan(source);
+    prayerNotificationManager.setAthanSource(source as any);
+  };
+
+  const handleVolumeChange = (volume: number) => {
+    setAthanVolume(volume);
+    prayerNotificationManager.setVolume(volume);
+  };
+
+  const handleNotifyBeforeChange = (minutes: number) => {
+    setNotifyBeforeMinutes(minutes);
+    prayerNotificationManager.setNotifyBefore(minutes);
+  };
+
+  const stopAthan = () => {
+    prayerNotificationManager.stopAthan();
+  };
+
   const refreshPrayerTimes = () => {
-    if (location) {
+    if (location || manualLocation.city) {
       loadPrayerTimes();
+    } else if (locationPermission === 'granted') {
+      getUserLocation();
+    } else {
+      setShowManualInput(true);
     }
   };
 
   const currentMethod = CALCULATION_METHODS.find(m => m.id === calculationMethod);
+  const athanSources = prayerNotificationManager.getAvailableAthanSources();
 
-  if (loading) return (
-    <div className={cn(
-      "bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-slate-900 dark:via-slate-800 dark:to-emerald-900 rounded-2xl shadow-2xl p-8 flex justify-center items-center min-h-[400px]",
-      theme === 'ramadan' ? 'from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-900 dark:via-orange-900 dark:to-yellow-900' : ''
-    )}>
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-4 border-emerald-500 border-t-transparent mx-auto mb-4"></div>
-        <p className="text-emerald-600 dark:text-emerald-400 font-medium">
-          {language === 'ar' ? 'جاري تحميل أوقات الصلاة...' : 'Loading prayer times...'}
-        </p>
+  if (loading && !showManualInput && locationPermission !== 'prompt') {
+    return (
+      <div className={cn(
+        "bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-slate-900 dark:via-slate-800 dark:to-emerald-900 rounded-2xl shadow-2xl p-8 flex justify-center items-center min-h-[400px]",
+        theme === 'ramadan' ? 'from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-900 dark:via-orange-900 dark:to-yellow-900' : ''
+      )}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-emerald-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-emerald-600 dark:text-emerald-400 font-medium">
+            {language === 'ar' ? 'جاري تحميل أوقات الصلاة...' : 'Loading prayer times...'}
+          </p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   // Location Permission Request Screen
-  if (locationPermission === 'prompt' || (locationPermission === 'denied' && !location)) {
+  if (locationPermission === 'prompt' || (locationPermission === 'denied' && !location && !manualLocation.city)) {
     return (
       <div className={cn(
         "bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-slate-900 dark:via-slate-800 dark:to-emerald-900 rounded-2xl shadow-2xl overflow-hidden",
@@ -716,7 +859,8 @@ export default function PrayerTimes() {
               {locationPermission !== 'denied' && (
                 <button
                   onClick={requestLocationPermission}
-                  className="px-4 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl font-medium transition-colors"
+                  className="px-4 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl font-medium transition-colors flex items-center justify-center"
+                  title={language === 'ar' ? 'استخدام الموقع التلقائي' : 'Use automatic location'}
                 >
                   <Navigation className="w-5 h-5" />
                 </button>
@@ -832,9 +976,13 @@ export default function PrayerTimes() {
               <MapPin className="w-4 h-4" />
               <span>
                 {location.city}, {location.country}
-                {locationMethod === 'manual' && (
+                {locationMethod === 'manual' ? (
                   <span className="ml-2 text-xs bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">
                     {language === 'ar' ? 'يدوي' : 'Manual'}
+                  </span>
+                ) : (
+                  <span className="ml-2 text-xs bg-emerald-200 dark:bg-emerald-700 px-2 py-0.5 rounded-full">
+                    {language === 'ar' ? 'تلقائي' : 'Auto'}
                   </span>
                 )}
               </span>
@@ -849,7 +997,8 @@ export default function PrayerTimes() {
               {language === 'ar' ? 'الإعدادات' : 'Settings'}
             </h3>
             
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Calculation Method */}
               <div>
                 <label className="block text-sm font-medium mb-2">
                   {language === 'ar' ? 'طريقة الحساب' : 'Calculation Method'}
@@ -867,32 +1016,130 @@ export default function PrayerTimes() {
                 </select>
               </div>
               
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={notificationsEnabled}
-                    onChange={toggleNotifications}
-                    className="w-5 h-5 rounded text-emerald-500 focus:ring-emerald-500"
-                  />
-                  <span className="text-sm font-medium">
-                    {language === 'ar' ? 'تفعيل التنبيهات' : 'Enable Notifications'}
-                  </span>
-                </label>
-                <Bell className={`w-5 h-5 ${notificationsEnabled ? 'text-emerald-500' : 'text-slate-400'}`} />
+              {/* Notifications Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notificationsEnabled}
+                      onChange={toggleNotifications}
+                      className="w-5 h-5 rounded text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm font-medium">
+                      {language === 'ar' ? 'تفعيل التنبيهات' : 'Enable Notifications'}
+                    </span>
+                  </label>
+                  <Bell className={`w-5 h-5 ${notificationsEnabled ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`} />
+                </div>
+                
+                {/* Notification Settings (only show if notifications enabled) */}
+                {notificationsEnabled && (
+                  <div className="space-y-4 pl-4 border-l-2 border-emerald-200 dark:border-emerald-700">
+                    {/* Notification Permission Warning */}
+                    {!hasNotificationPermission && (
+                      <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                          <div className="text-sm">
+                            <p className="font-medium">
+                              {language === 'ar' ? 'إذن التنبيهات مطلوب' : 'Notification Permission Required'}
+                            </p>
+                            <button
+                              onClick={requestNotificationPermission}
+                              className="mt-1 text-emerald-600 dark:text-emerald-400 hover:underline"
+                            >
+                              {language === 'ar' ? 'انقر هنا للسماح' : 'Click here to allow'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Athan Audio Selection */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        {language === 'ar' ? 'صوت الأذان' : 'Athan Audio'}
+                      </label>
+                      <select
+                        value={selectedAthan}
+                        onChange={(e) => handleAthanSourceChange(e.target.value)}
+                        className="w-full p-3 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      >
+                        {Object.entries(athanSources).map(([key, source]) => (
+                          <option key={key} value={key}>
+                            {language === 'ar' ? source.arabicName : source.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Volume Control */}
+                    <div>
+                      <label className="flex items-center justify-between text-sm font-medium mb-2">
+                        <span>{language === 'ar' ? 'صوت الأذان' : 'Athan Volume'}</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">{Math.round(athanVolume * 100)}%</span>
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <Volume2 className="w-5 h-5 text-slate-400" />
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={athanVolume}
+                          onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                          className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Notify Before */}
+                    <div>
+                      <label className="flex items-center justify-between text-sm font-medium mb-2">
+                        <span>{language === 'ar' ? 'التنبيه قبل الصلاة' : 'Notify Before Prayer'}</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">{notifyBeforeMinutes} {language === 'ar' ? 'دقيقة' : 'min'}</span>
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <Clock className="w-5 h-5 text-slate-400" />
+                        <input
+                          type="range"
+                          min="1"
+                          max="30"
+                          step="1"
+                          value={notifyBeforeMinutes}
+                          onChange={(e) => handleNotifyBeforeChange(parseInt(e.target.value))}
+                          className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Stop Athan Button */}
+                    <button
+                      onClick={stopAthan}
+                      className="w-full py-2 bg-red-100 dark:bg-red-900/20 hover:bg-red-200 dark:hover:bg-red-800/30 text-red-600 dark:text-red-400 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      <span>{language === 'ar' ? 'إيقاف الأذان الحالي' : 'Stop Current Athan'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
               
+              {/* Refresh Button */}
               <button
                 onClick={refreshPrayerTimes}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-medium transition-all duration-200 transform hover:scale-105 shadow-lg"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-medium transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
               >
+                <RefreshCw className="w-5 h-5" />
                 {language === 'ar' ? 'تحديث الأوقات' : 'Refresh Times'}
               </button>
               
+              {/* Change Location */}
               <button
                 onClick={() => setShowManualInput(true)}
-                className="w-full py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors"
+                className="w-full py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
+                <MapPin className="w-5 h-5" />
                 {language === 'ar' ? 'تغيير الموقع' : 'Change Location'}
               </button>
             </div>
@@ -937,11 +1184,20 @@ export default function PrayerTimes() {
                   <div
                     key={prayer}
                     className={cn(
-                      "p-4 rounded-xl transition-all duration-200 hover:scale-105",
+                      "p-4 rounded-xl transition-all duration-200 hover:scale-105 cursor-pointer",
                       isNext 
                         ? "bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-lg transform scale-105" 
                         : "bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-md border border-slate-200 dark:border-slate-700"
                     )}
+                    onClick={() => {
+                      if (notificationsEnabled) {
+                        // Test notification and athan
+                        prayerNotificationManager.stopAthan();
+                        setTimeout(() => {
+                          prayerNotificationManager['sendNotification'](prayer, time);
+                        }, 100);
+                      }
+                    }}
                   >
                     <div className="text-center">
                       <div className="flex justify-center mb-2">
@@ -978,6 +1234,23 @@ export default function PrayerTimes() {
                 {language === 'ar' ? 'طريقة الحساب:' : 'Calculation Method:'} {' '}
                 {language === 'ar' ? currentMethod.nameAr : currentMethod.name}
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* Notifications Status */}
+        {notificationsEnabled && (
+          <div className="mt-4 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full">
+              <Bell className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                {language === 'ar' ? 'التنبيهات مفعلة' : 'Notifications Active'}
+              </span>
+              {!hasNotificationPermission && (
+                <span className="text-xs bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 px-2 py-0.5 rounded-full">
+                  {language === 'ar' ? 'يتطلب إذن' : 'Permission Needed'}
+                </span>
+              )}
             </div>
           </div>
         )}
