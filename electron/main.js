@@ -13,6 +13,8 @@ app.setAppUserModelId("com.salsabeel.app");
 
 app.commandLine.appendSwitch("enable-features", "AllowGeolocationOnInsecureOrigins");
 app.commandLine.appendSwitch("disable-features", "OutOfBlinkCors");
+// Enable audio autoplay without user gesture
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 /* ===============================
    Helpers
@@ -42,6 +44,18 @@ app.whenReady().then(() => {
     }
   });
 
+  // Register custom protocol for audio files
+  protocol.registerFileProtocol('athan-audio', (request, callback) => {
+    try {
+      const url = request.url.replace('athan-audio://', '');
+      const audioPath = path.join(app.getAppPath(), 'public', 'athan-audio', url);
+      callback({ path: audioPath });
+    } catch (err) {
+      console.error('Audio protocol error:', err);
+      callback({ error: -6 });
+    }
+  });
+
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -58,8 +72,9 @@ app.whenReady().then(() => {
    Permissions
 ================================ */
 app.on("web-contents-created", (_, contents) => {
-  contents.session.setPermissionRequestHandler((_, permission, callback) => {
-    const allowed = ["geolocation", "notifications", "media"];
+  contents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowed = ["geolocation", "notifications", "media", "autoplay"];
+    console.log(`Permission requested: ${permission}, allowed: ${allowed.includes(permission)}`);
     callback(allowed.includes(permission));
   });
 
@@ -84,8 +99,15 @@ function createWindow() {
       contextIsolation: false,
       webSecurity: false,
       allowRunningInsecureContent: true,
+      autoplayPolicy: 'no-user-gesture-required',
+      webviewTag: false,
+      // Enable media features
+      enableBlinkFeatures: 'AutoplayIgnoreWebAudio,AutoplayIgnoresWebAudio',
     },
   });
+
+  // Enable hardware acceleration for better audio performance
+  mainWindow.setBackgroundColor('#f8f4e9');
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
@@ -118,7 +140,7 @@ function createWindow() {
 
     mainWindow.loadFile(indexPath);
 
-    // TEMP: enable to debug white screen
+    // Enable for debugging
     // mainWindow.webContents.openDevTools();
   }
 
@@ -189,6 +211,34 @@ ipcMain.handle("get_app_info", () => ({
 
 ipcMain.handle("get-hadith-path", () => {
   return path.join(getDistPath(), "assets");
+});
+
+// Handle prayer notifications IPC
+ipcMain.handle('prayer-notification-test', async (event, prayerName, prayerTime) => {
+  try {
+    // Create notification in main process (more reliable)
+    if (mainWindow) {
+      const notification = {
+        title: '🕌 موعد الصلاة',
+        body: `حان الآن وقت صلاة ${prayerName} (${prayerTime})`
+      };
+      
+      // Show notification
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: notification.title,
+        message: notification.body,
+        buttons: ['OK', 'Stop Athan'],
+        defaultId: 0,
+        cancelId: 1
+      });
+      
+      return { clicked: result.response === 1 };
+    }
+  } catch (error) {
+    console.error('Error showing notification:', error);
+  }
+  return null;
 });
 
 /* ===============================
