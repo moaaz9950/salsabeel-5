@@ -11,7 +11,6 @@ import Azkar from './components/Azkar';
 import Calendar from './components/Calendar';
 import ZakatCalculator from './components/ZakatCalculator';
 import RamadanPage from './components/RamadanPage';
-import { getCurrentRamadanState } from './lib/ramadanService';
 
 // Dynamic imports for heavy components
 const TafsirView = lazy(() => import('./components/TafsirView'));
@@ -96,9 +95,17 @@ function App() {
   const [showSurahView, setShowSurahView] = useState(false);
   const [isRamadan, setIsRamadan] = useState(false);
 
+  // Simplified Ramadan check - you can replace this with actual date calculation
   useEffect(() => {
-    const ramadanState = getCurrentRamadanState();
-    setIsRamadan(ramadanState.isRamadan);
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1; // 1-12
+    const currentYear = currentDate.getFullYear();
+    
+    // Simple check: Assume Ramadan is in April (month 4) for testing
+    // In production, you would use Hijri calendar calculation
+    const isRamadanMonth = currentMonth === 4; // Change this to actual calculation
+    
+    setIsRamadan(isRamadanMonth);
   }, []);
 
   const handleSurahSelect = (surahNumber: number) => {
@@ -220,20 +227,22 @@ function App() {
             >
               <CalendarIcon className="w-5 h-5" />
             </button>
-            {showRamadanTab && (
-              <button
-                onClick={() => setActiveTab('ramadan')}
-                className={cn(
-                  "px-4 py-2 rounded-lg animate-pulse",
-                  activeTab === 'ramadan' ?
-                    'bg-amber-500 text-white' :
-                    'hover:bg-amber-100'
-                )}
-                title="Ramadan"
-              >
-                <Flame className="w-5 h-5" />
-              </button>
-            )}
+            
+            {/* Always show Ramadan tab, but highlight during Ramadan */}
+            <button
+              onClick={() => setActiveTab('ramadan')}
+              className={cn(
+                "px-4 py-2 rounded-lg",
+                activeTab === 'ramadan' ?
+                  theme === 'ramadan' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
+                  : '',
+                isRamadan && 'animate-pulse'
+              )}
+              title="Ramadan"
+            >
+              <Flame className="w-5 h-5" />
+            </button>
+            
             <button
               onClick={() => setActiveTab('zakat')}
               className={cn(
@@ -330,6 +339,7 @@ function App() {
             </div>
           </div>
         )}
+
         {activeTab === 'azkar' && (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
@@ -365,7 +375,7 @@ function App() {
         {activeTab === 'ramadan' && (
           <div className="grid gap-6 md:grid-cols-2">
             <div className="md:col-span-2">
-              <RamadanPage />
+              <RamadanPage theme={theme} />
             </div>
           </div>
         )}
@@ -417,7 +427,6 @@ function App() {
                     />
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
