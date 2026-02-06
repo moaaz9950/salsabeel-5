@@ -32,6 +32,7 @@ import { useTheme } from '../hooks/useTheme';
 import { cn } from '../lib/utils';
 import { saveSurah, getSurah, saveRecitation, getRecitation } from '../lib/storage';
 import { QURAN_EDITIONS } from '../lib/api';
+import AudioPlayer from './AudioPlayer'; // Import the AudioPlayer component
 
 interface SurahViewProps {
   surahNumber: number;
@@ -69,6 +70,7 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
   const [isPlayingFullSurah, setIsPlayingFullSurah] = useState(false);
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [fullSurahAudioUrl, setFullSurahAudioUrl] = useState<string | null>(null);
 
   // Verse-by-verse states
   const [verseByVerseMode, setVerseByVerseMode] = useState(() => {
@@ -79,7 +81,6 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
   });
   const [verseAudios, setVerseAudios] = useState<Map<number, string>>(new Map());
   const [loadingVerseAudio, setLoadingVerseAudio] = useState<Set<number>>(new Set());
-  const [currentVerseAudio, setCurrentVerseAudio] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
   const [autoPlayNextVerse, setAutoPlayNextVerse] = useState(() => {
     return localStorage.getItem('autoPlayNextVerse') !== 'false';
@@ -88,8 +89,9 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
   // Dropdown state
   const [showVerseReciterDropdown, setShowVerseReciterDropdown] = useState(false);
   
-  // Audio player ref
+  // Audio refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioPlayerRef = useRef<any>(null);
 
   // Get selected verse reciter info
   const selectedVerseReciterInfo = getVerseReciterById(selectedVerseReciter);
@@ -115,7 +117,7 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
   }, [reciters, selectedEdition]);
 
   useEffect(() => {
-    // Initialize audio element
+    // Initialize audio element for verse-by-verse
     audioRef.current = new Audio();
     
     audioRef.current.addEventListener('ended', handleAudioEnded);
@@ -315,6 +317,12 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
         audioRef.current.currentTime = 0;
       }
       
+      // Stop full surah playback if active
+      if (isPlayingFullSurah && audioPlayerRef.current) {
+        audioPlayerRef.current.audio.current.pause();
+        setIsPlayingFullSurah(false);
+      }
+      
       setCurrentAudioVerse(verseNumber);
       setIsPlaying(false);
       
@@ -385,6 +393,19 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
     setVerseByVerseMode(newMode);
     localStorage.setItem('verseByVerseMode', newMode.toString());
     
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.audio.current.pause();
+    }
+    
+    setIsPlaying(false);
+    setCurrentAudioVerse(null);
+    setIsPlayingFullSurah(false);
+    
     if (newMode) {
       // Preload first few verses when enabling
       if (surah) {
@@ -393,14 +414,6 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
           loadVerseAudio(verse.number);
         });
       }
-    } else {
-      // Stop playback and reset
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-      setIsPlaying(false);
-      setCurrentAudioVerse(null);
     }
   };
 
@@ -426,64 +439,81 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
     localStorage.setItem('autoPlayNextVerse', newValue.toString());
   };
 
-  // Original functions for full surah playback
+  // Full surah audio functions
   const handlePlayFullSurah = async () => {
-    if (!selectedReciter) return;
+    if (!selectedReciter) {
+      alert('Please select a reciter first');
+      return;
+    }
 
     try {
-      if (isPlayingFullSurah) {
-        if (audioRef.current) {
-          if (isPlaying) {
-            audioRef.current.pause();
-          } else {
-            audioRef.current.play();
-          }
-          setIsPlaying(!isPlaying);
+      if (isPlayingFullSurah && audioPlayerRef.current) {
+        // Toggle play/pause
+        if (isPlaying) {
+          audioPlayerRef.current.audio.current.pause();
+        } else {
+          audioPlayerRef.current.audio.current.play();
         }
+        setIsPlaying(!isPlaying);
         return;
       }
 
-      setCurrentAudioVerse(null);
+      // Stop verse-by-verse playback if active
+      if (verseByVerseMode && audioRef.current && isPlaying) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        setIsPlaying(false);
+        setCurrentAudioVerse(null);
+      }
 
       const audioResponse = await fetchReciterSurahForEdition(selectedReciter.id, surahNumber, selectedEdition);
-      if (audioResponse && audioResponse.audio_files && audioRef.current) {
-        audioRef.current.src = audioResponse.audio_files[0].audio_url;
-        audioRef.current.load();
-        audioRef.current.play();
+      if (audioResponse && audioResponse.audio_files) {
+        setFullSurahAudioUrl(audioResponse.audio_files[0].audio_url);
         setIsPlayingFullSurah(true);
-        setIsPlaying(true);
+        // Auto-play will be handled by AudioPlayer component
       }
     } catch (error) {
       console.error('Error loading full surah audio:', error);
+      alert('Failed to load audio. Please try again.');
     }
   };
 
+  const handleFullSurahPlay = () => {
+    setIsPlaying(true);
+  };
+
+  const handleFullSurahPause = () => {
+    setIsPlaying(false);
+  };
+
   const handlePlayVerse = async (verse: number) => {
-    if (!selectedReciter) return;
+    if (!selectedReciter) {
+      alert('Please select a reciter first');
+      return;
+    }
 
     try {
-      if (isPlayingFullSurah) {
+      // Stop full surah playback if active
+      if (isPlayingFullSurah && audioPlayerRef.current) {
+        audioPlayerRef.current.audio.current.pause();
         setIsPlayingFullSurah(false);
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        }
       }
 
-      if (currentAudioVerse === verse && isPlaying && audioRef.current) {
+      // Stop verse-by-verse playback if active
+      if (verseByVerseMode && audioRef.current && isPlaying) {
         audioRef.current.pause();
+        audioRef.current.currentTime = 0;
         setIsPlaying(false);
-        return;
       }
 
+      // Load full surah audio and seek to verse
       const audioResponse = await fetchReciterSurahForEdition(selectedReciter.id, surahNumber, selectedEdition);
-      if (audioResponse && audioResponse.audio_files && audioRef.current) {
-        audioRef.current.src = audioResponse.audio_files[0].audio_url;
-        audioRef.current.load();
-        audioRef.current.currentTime = 0; // Start from beginning
-        audioRef.current.play();
+      if (audioResponse && audioResponse.audio_files) {
+        setFullSurahAudioUrl(audioResponse.audio_files[0].audio_url);
         setCurrentAudioVerse(verse);
         setIsPlaying(true);
+        // Note: Seeking to specific verse time would require verse timing data
+        // For now, just play from beginning
       }
     } catch (error) {
       console.error('Error loading verse audio:', error);
@@ -755,6 +785,36 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
               Retry
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Audio Player for Full Surah */}
+      {isPlayingFullSurah && fullSurahAudioUrl && selectedReciter && (
+        <div className="mx-6 mt-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-2">
+            <Volume2 className="w-5 h-5 text-emerald-500" />
+            <div>
+              <div className="font-semibold text-emerald-700 dark:text-emerald-300">
+                Now Playing: Full Surah
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">
+                {selectedReciter.name} • {selectedReciter.rewaya || 'Unknown'}
+              </div>
+            </div>
+          </div>
+          <AudioPlayer
+            ref={audioPlayerRef}
+            reciterId={selectedReciter.id}
+            surahNumber={surahNumber}
+            audioUrl={fullSurahAudioUrl}
+            onPlay={handleFullSurahPlay}
+            onPause={handleFullSurahPause}
+            onError={(error) => {
+              console.error('Audio player error:', error);
+              setIsPlayingFullSurah(false);
+              setIsPlaying(false);
+            }}
+          />
         </div>
       )}
 
