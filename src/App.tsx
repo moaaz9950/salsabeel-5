@@ -220,7 +220,7 @@ function App() {
             >
               <CalendarIcon className="w-5 h-5" />
             </button>
-            {isRamadan && (
+            {showRamadanTab && (
               <button
                 onClick={() => setActiveTab('ramadan')}
                 className={cn(
