@@ -30,7 +30,7 @@ import {
 import TafsirView from './TafsirView';
 import { useTheme } from '../hooks/useTheme';
 import { cn } from '../lib/utils';
-import { saveSurah, getSurah, saveRecitation, getRecitation } from '../lib/storage';
+import { saveSurah, getSurah } from '../lib/storage';
 import { QURAN_EDITIONS } from '../lib/api';
 import AudioPlayer from './AudioPlayer'; // Import the AudioPlayer component
 
@@ -118,12 +118,14 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
 
   useEffect(() => {
     // Initialize audio element for verse-by-verse
-    audioRef.current = new Audio();
-    
-    audioRef.current.addEventListener('ended', handleAudioEnded);
-    audioRef.current.addEventListener('play', () => setIsPlaying(true));
-    audioRef.current.addEventListener('pause', () => setIsPlaying(false));
-    audioRef.current.addEventListener('error', handleAudioError);
+    if (verseByVerseMode) {
+      audioRef.current = new Audio();
+      
+      audioRef.current.addEventListener('ended', handleAudioEnded);
+      audioRef.current.addEventListener('play', () => setIsPlaying(true));
+      audioRef.current.addEventListener('pause', () => setIsPlaying(false));
+      audioRef.current.addEventListener('error', handleAudioError);
+    }
     
     // Close dropdown when clicking outside
     const handleClickOutside = (event: MouseEvent) => {
@@ -145,7 +147,7 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
       }
       document.removeEventListener('click', handleClickOutside);
     };
-  }, [showVerseReciterDropdown]);
+  }, [showVerseReciterDropdown, verseByVerseMode]);
 
   async function checkDownloadStatus() {
     const downloaded = await getSurah(surahNumber);
@@ -159,18 +161,6 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
       setIsDownloading(true);
       
       await saveSurah(surah);
-      
-      if (selectedReciter) {
-        const audioResponse = await fetchReciterSurahForEdition(selectedReciter.id, surahNumber, selectedEdition);
-        if (audioResponse && audioResponse.audio_files) {
-          await saveRecitation(
-            surahNumber,
-            selectedReciter.id,
-            audioResponse.audio_files[0].audio_url
-          );
-        }
-      }
-      
       setIsDownloaded(true);
     } catch (error) {
       console.error('Error downloading surah:', error);
@@ -319,7 +309,7 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
       
       // Stop full surah playback if active
       if (isPlayingFullSurah && audioPlayerRef.current) {
-        audioPlayerRef.current.audio.current.pause();
+        audioPlayerRef.current.pause();
         setIsPlayingFullSurah(false);
       }
       
@@ -399,12 +389,13 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
       audioRef.current.currentTime = 0;
     }
     if (audioPlayerRef.current) {
-      audioPlayerRef.current.audio.current.pause();
+      audioPlayerRef.current.pause();
     }
     
     setIsPlaying(false);
     setCurrentAudioVerse(null);
     setIsPlayingFullSurah(false);
+    setFullSurahAudioUrl(null);
     
     if (newMode) {
       // Preload first few verses when enabling
@@ -450,11 +441,10 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
       if (isPlayingFullSurah && audioPlayerRef.current) {
         // Toggle play/pause
         if (isPlaying) {
-          audioPlayerRef.current.audio.current.pause();
+          audioPlayerRef.current.pause();
         } else {
-          audioPlayerRef.current.audio.current.play();
+          audioPlayerRef.current.play();
         }
-        setIsPlaying(!isPlaying);
         return;
       }
 
@@ -470,10 +460,55 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
       if (audioResponse && audioResponse.audio_files) {
         setFullSurahAudioUrl(audioResponse.audio_files[0].audio_url);
         setIsPlayingFullSurah(true);
-        // Auto-play will be handled by AudioPlayer component
+        
+        // Auto-play the audio after a short delay
+        setTimeout(() => {
+          if (audioPlayerRef.current) {
+            audioPlayerRef.current.play();
+          }
+        }, 100);
       }
     } catch (error) {
       console.error('Error loading full surah audio:', error);
+      alert('Failed to load audio. Please try again.');
+    }
+  };
+
+  const handlePlayVerse = async (verse: number) => {
+    if (verseByVerseMode) {
+      // If in verse-by-verse mode, use that
+      playVerseByVerse(verse);
+      return;
+    }
+
+    if (!selectedReciter) {
+      alert('Please select a reciter first');
+      return;
+    }
+
+    try {
+      // Stop full surah playback if active
+      if (isPlayingFullSurah && audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        setIsPlayingFullSurah(false);
+      }
+
+      // For non-verse-by-verse mode, just play from beginning
+      const audioResponse = await fetchReciterSurahForEdition(selectedReciter.id, surahNumber, selectedEdition);
+      if (audioResponse && audioResponse.audio_files) {
+        setFullSurahAudioUrl(audioResponse.audio_files[0].audio_url);
+        setCurrentAudioVerse(verse);
+        setIsPlayingFullSurah(true);
+        
+        // Auto-play the audio
+        setTimeout(() => {
+          if (audioPlayerRef.current) {
+            audioPlayerRef.current.play();
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error loading verse audio:', error);
       alert('Failed to load audio. Please try again.');
     }
   };
@@ -484,40 +519,6 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
 
   const handleFullSurahPause = () => {
     setIsPlaying(false);
-  };
-
-  const handlePlayVerse = async (verse: number) => {
-    if (!selectedReciter) {
-      alert('Please select a reciter first');
-      return;
-    }
-
-    try {
-      // Stop full surah playback if active
-      if (isPlayingFullSurah && audioPlayerRef.current) {
-        audioPlayerRef.current.audio.current.pause();
-        setIsPlayingFullSurah(false);
-      }
-
-      // Stop verse-by-verse playback if active
-      if (verseByVerseMode && audioRef.current && isPlaying) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        setIsPlaying(false);
-      }
-
-      // Load full surah audio and seek to verse
-      const audioResponse = await fetchReciterSurahForEdition(selectedReciter.id, surahNumber, selectedEdition);
-      if (audioResponse && audioResponse.audio_files) {
-        setFullSurahAudioUrl(audioResponse.audio_files[0].audio_url);
-        setCurrentAudioVerse(verse);
-        setIsPlaying(true);
-        // Note: Seeking to specific verse time would require verse timing data
-        // For now, just play from beginning
-      }
-    } catch (error) {
-      console.error('Error loading verse audio:', error);
-    }
   };
 
   return (
@@ -813,6 +814,8 @@ export default function SurahView({ surahNumber, initialVerse = 1, onBack }: Sur
               console.error('Audio player error:', error);
               setIsPlayingFullSurah(false);
               setIsPlaying(false);
+              setFullSurahAudioUrl(null);
+              alert('Failed to play audio. Please try again.');
             }}
           />
         </div>
