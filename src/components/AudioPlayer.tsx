@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import ReactH5AudioPlayer from 'react-h5-audio-player';
 import { Download, Trash2, CheckCircle } from 'lucide-react';
 import { saveReciter, getReciterAudio, removeReciterAudio, isReciterDownloaded } from '../lib/storage';
@@ -7,13 +7,38 @@ interface AudioPlayerProps {
   reciterId: number;
   surahNumber: number;
   audioUrl: string;
+  onPlay?: () => void;
+  onPause?: () => void;
   onError?: (error: Error) => void;
 }
 
-export default function AudioPlayer({ reciterId, surahNumber, audioUrl, onError }: AudioPlayerProps) {
+const AudioPlayer = forwardRef(({ 
+  reciterId, 
+  surahNumber, 
+  audioUrl, 
+  onPlay, 
+  onPause, 
+  onError 
+}: AudioPlayerProps, ref) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(null);
+  const audioPlayerRef = React.useRef<any>(null);
+
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    audio: audioPlayerRef,
+    play: () => {
+      if (audioPlayerRef.current && audioPlayerRef.current.audio.current) {
+        audioPlayerRef.current.audio.current.play();
+      }
+    },
+    pause: () => {
+      if (audioPlayerRef.current && audioPlayerRef.current.audio.current) {
+        audioPlayerRef.current.audio.current.pause();
+      }
+    }
+  }));
 
   useEffect(() => {
     checkDownloadStatus();
@@ -70,11 +95,14 @@ export default function AudioPlayer({ reciterId, surahNumber, audioUrl, onError 
   return (
     <div className="relative">
       <ReactH5AudioPlayer
+        ref={audioPlayerRef}
         src={localAudioUrl || audioUrl}
         autoPlay={false}
         showJumpControls={false}
         layout="stacked"
         customControlsSection={['MAIN_CONTROLS', 'VOLUME_CONTROLS']}
+        onPlay={onPlay}
+        onPause={onPause}
         onError={(e) => {
           console.error('Audio playback error:', e);
           onError?.(new Error('Failed to play audio'));
@@ -86,7 +114,7 @@ export default function AudioPlayer({ reciterId, surahNumber, audioUrl, onError 
           <>
             <button
               onClick={handleDelete}
-              className="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 text-red-500"
+              className="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 text-red-500 transition-colors"
               title="Remove download"
             >
               <Trash2 className="w-4 h-4" />
@@ -99,7 +127,7 @@ export default function AudioPlayer({ reciterId, surahNumber, audioUrl, onError 
           <button
             onClick={handleDownload}
             disabled={isDownloading}
-            className={`p-1.5 rounded-full ${
+            className={`p-1.5 rounded-full transition-colors ${
               isDownloading 
                 ? 'opacity-50 cursor-not-allowed' 
                 : 'hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -112,4 +140,8 @@ export default function AudioPlayer({ reciterId, surahNumber, audioUrl, onError 
       </div>
     </div>
   );
-}
+});
+
+AudioPlayer.displayName = 'AudioPlayer';
+
+export default AudioPlayer;
